@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from typing import AsyncIterator
@@ -39,8 +40,11 @@ async def _verify(answer: str, context_parts: list[str]) -> str:
     context = "\n\n---\n\n".join(p[:800] for p in context_parts[:6])
     prompt = _VERIFY_TEMPLATE.format(context=context, answer=answer[:2000])
     try:
-        result = await llm.ainvoke(
-            [SystemMessage(content=_VERIFY_SYSTEM), HumanMessage(content=prompt)]
+        result = await asyncio.wait_for(
+            llm.ainvoke(
+                [SystemMessage(content=_VERIFY_SYSTEM), HumanMessage(content=prompt)]
+            ),
+            timeout=60.0,
         )
         text = result.content if hasattr(result, "content") else str(result)
         return _THINK_RE.sub("", text).strip()
