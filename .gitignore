@@ -14,3 +14,7 @@ files/*
 .ruff_cache
 frontend/node_modules/
 .DS_Store
+
+ingestion/
+ingestion-test/
+qdrant-snapshots/

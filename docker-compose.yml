@@ -1,6 +1,5 @@
 volumes:
-  n8n_data:
-  postgres_data:
+  qdrant_data:
 
 networks:
   rag_network:
@@ -8,25 +7,40 @@ networks:
 
 services:
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: postgres
+  llama-chat:
+    image: ghcr.io/ggml-org/llama.cpp:server${LLAMA_IMAGE_SUFFIX:-}
+    container_name: llama-chat
     restart: unless-stopped
     networks:
       - rag_network
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-n8n}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-n8npassword}
-      POSTGRES_DB: ${POSTGRES_DB:-n8n}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-n8n}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - ./models:/models:ro
     ports:
-      - "5432:5432"
+      - "8080:8080"
+    command: >
+      -m /models/qwen3-8b-q4_k_m.gguf
+      --host 0.0.0.0
+      --port 8080
+      --ctx-size 32768
+      -n -1
+      -ngl ${GPU_LAYERS:-0}
+
+  llama-embed:
+    image: ghcr.io/ggml-org/llama.cpp:server${LLAMA_IMAGE_SUFFIX:-}
+    container_name: llama-embed
+    restart: unless-stopped
+    networks:
+      - rag_network
+    volumes:
+      - ./models:/models:ro
+    ports:
+      - "8081:8081"
+    command: >
+      -m /models/bge-m3-q4_k_m.gguf
+      --host 0.0.0.0
+      --port 8081
+      --embedding
+      -ngl ${GPU_LAYERS:-0}
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -35,49 +49,75 @@ services:
     networks:
       - rag_network
     volumes:
-      - ./qdrant_storage:/qdrant/storage
+      - qdrant_data:/qdrant/storage
     ports:
-      - "6333:6333"   # REST API
-      - "6334:6334"   # gRPC
+      - "6333:6333"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:6333/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
-  n8n:
-    image: docker.n8n.io/n8nio/n8n   # точно такой же образ как у тебя
-    container_name: n8n
+  docs-api:
+    image: python:3.12-slim-bookworm
+    container_name: docs-api
+    restart: unless-stopped
+    networks:
+      - rag_network
+    volumes:
+      - ./files/converted:/docs:ro
+      - ./docs_server.py:/docs_server.py:ro
+    command: python3 /docs_server.py
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000', timeout=2)\" || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    container_name: langgraph-agent
+    restart: unless-stopped
+    networks:
+      - rag_network
+    environment:
+      LLM_URL: http://llama-chat:8080
+      EMBED_URL: http://llama-embed:8081
+      QDRANT_URL: http://qdrant:6333
+      DOCS_API_URL: http://docs-api:8000
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      docs-api:
+        condition: service_healthy
+      llama-chat:
+        condition: service_started
+      llama-embed:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: agent-frontend
     restart: unless-stopped
     networks:
       - rag_network
     depends_on:
-      postgres:
-        condition: service_healthy
+      - agent
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    networks:
+      - rag_network
     ports:
-      - "5678:5678"
-    environment:
-      # База данных
-      DB_TYPE: postgresdb
-      DB_POSTGRESDB_HOST: postgres
-      DB_POSTGRESDB_PORT: 5432
-      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-n8n}
-      DB_POSTGRESDB_USER: ${POSTGRES_USER:-n8n}
-      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-n8npassword}
-
-      # Основные настройки
-      N8N_HOST: ${N8N_HOST:-localhost}
-      N8N_PORT: 5678
-      N8N_PROTOCOL: http
-      WEBHOOK_URL: http://${N8N_HOST:-localhost}:5678
-
-      # Из твоей оригинальной команды
-      GENERIC_TIMEZONE: Europe/Moscow
-      TZ: Europe/Moscow
-      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
-      N8N_RUNNERS_ENABLED: "true"
-      N8N_LOG_LEVEL: info
-
+      - "80:80"
     volumes:
-      - n8n_data:/home/node/.n8n
-      - ./files:/files   # папка для PDF и других файлов
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - agent

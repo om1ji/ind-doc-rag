@@ -1,0 +1,41 @@
+:root {
+  --chat--color--primary: #3b82f6;
+  --chat--color--primary--shade-50: #2563eb;
+  --chat--color--secondary: #6366f1;
+  --chat--color--secondary--shade-50: #4f46e5;
+
+  --chat--color--white: #e8eaf6;
+  --chat--color--light: #1a1d27;
+  --chat--color--light--shade-50: #21253a;
+  --chat--color--light--shade-100: #2a2f45;
+  --chat--color--medium: #7b82a8;
+  --chat--color--dark: #e8eaf6;
+  --chat--color--disabled: #4a5170;
+  --chat--color--typing: #7b82a8;
+
+  --chat--header--background: #1a1d27;
+  --chat--header--color: #e8eaf6;
+
+  --chat--message--bot--background: #1e2235;
+  --chat--message--bot--color: #e8eaf6;
+  --chat--message--bot--border: #2a2f45;
+  --chat--message--user--background: #2563eb;
+  --chat--message--user--color: #ffffff;
+
+  --chat--body--background: #0f1117;
+
+  --chat--input--background: #21253a;
+  --chat--input--border: #2a2f45;
+  --chat--input--border--active: #3b82f6;
+  --chat--input--color: #e8eaf6;
+  --chat--input--placeholder--color: #7b82a8;
+
+  --chat--toggle--background: #3b82f6;
+  --chat--toggle--hover--background: #2563eb;
+  --chat--toggle--active--background: #1d4ed8;
+  --chat--toggle--color: #ffffff;
+  --chat--toggle--size: 64px;
+
+  --chat--border-radius: 10px;
+  --chat--font-family: "Inter", system-ui, sans-serif;
+}

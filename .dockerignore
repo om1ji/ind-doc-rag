@@ -1,0 +1,14 @@
+.venv
+.env
+.git
+.ruff_cache
+__pycache__
+*.py[oc]
+node_modules
+frontend/node_modules
+models
+qdrant_storage
+qdrant-snapshots
+ingestion-test
+files
+.DS_Store
