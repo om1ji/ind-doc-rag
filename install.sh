@@ -18,7 +18,7 @@ echo "=== Загрузка моделей ==="
 if [ ! -f models/qwen3-8b-q4_k_m.gguf ]; then
   echo "Скачиваю qwen3-8b-q4_k_m.gguf (~5 GB)..."
   wget -c -O models/qwen3-8b-q4_k_m.gguf \
-    "https://huggingface.co/bartowski/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf"
+    "https://huggingface.co/Aldaris/Qwen3-8B-Q4_K_M-GGUF/resolve/main/qwen3-8b-q4_k_m.gguf"
 else
   echo "qwen3-8b-q4_k_m.gguf уже есть, пропускаю"
 fi
