@@ -7,10 +7,12 @@ mkdir -p models
 if nvidia-smi > /dev/null 2>&1; then
   export LLAMA_IMAGE_SUFFIX="-cuda"
   export GPU_LAYERS=99
+  export COMPOSE_FILE="docker-compose.yml:docker-compose.gpu.yml"
   echo "=== GPU режим (NVIDIA) ==="
 else
   export LLAMA_IMAGE_SUFFIX=""
   export GPU_LAYERS=0
+  export COMPOSE_FILE="docker-compose.yml"
   echo "=== CPU режим ==="
 fi
 
