@@ -6,7 +6,7 @@ interface Props {
 }
 
 export function ThinkingBlock({ content, streaming }: Props) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   if (!content && !streaming) return null;
 
