@@ -14,6 +14,8 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   thinking: string;
+  verification?: string;
+  verifying?: boolean;
   streaming?: boolean;
   error?: boolean;
   steps: ToolStep[];
@@ -114,6 +116,18 @@ export function useChat(config: ChatConfig) {
               }));
               break;
             }
+
+            case "verification-start":
+              updateAssistant(assistantId, (m) => ({ ...m, verifying: true }));
+              break;
+
+            case "verification":
+              updateAssistant(assistantId, (m) => ({
+                ...m,
+                verifying: false,
+                verification: event.data?.result ?? "",
+              }));
+              break;
 
             case "end":
               if (event.data?.output) {

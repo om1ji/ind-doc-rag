@@ -1,14 +1,52 @@
 import json
+import re
 from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
-from langchain_core.messages import HumanMessage
 
 from .graph import agent, llm
-from .memory import get_history, add_messages
+from .memory import add_messages, get_history
+
+_VERIFY_SYSTEM = (
+    "Ты — независимый проверщик фактов для системы промышленной безопасности. "
+    "Отвечай только на русском. Не думай вслух. Будь краток (3-6 строк)."
+)
+
+_VERIFY_TEMPLATE = """\
+Контекст из базы знаний (результаты поиска):
+{context}
+
+Ответ ассистента:
+{answer}
+
+Задача: найди в ответе конкретные числа, классы опасности, пороговые значения, \
+нормы закона. Для каждого — есть ли оно явно в контексте выше?
+
+Первая строка: "✓ Все утверждения подтверждены" или "⚠ Найдены расхождения".
+Далее: список проверенных утверждений (кратко).
+/nothink"""
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+async def _verify(answer: str, context_parts: list[str]) -> str:
+    if not answer.strip() or not context_parts:
+        return ""
+    context = "\n\n---\n\n".join(p[:800] for p in context_parts[:6])
+    prompt = _VERIFY_TEMPLATE.format(context=context, answer=answer[:2000])
+    try:
+        result = await llm.ainvoke(
+            [SystemMessage(content=_VERIFY_SYSTEM), HumanMessage(content=prompt)]
+        )
+        text = result.content if hasattr(result, "content") else str(result)
+        return _THINK_RE.sub("", text).strip()
+    except Exception:
+        return ""
+
 
 app = FastAPI()
 
@@ -96,6 +134,7 @@ async def _stream(message: str, session_id: str) -> AsyncIterator[str]:
 
     full_response = ""
     think_filter = _ThinkFilter()
+    context_parts: list[str] = []
 
     async for event in agent.astream_events(inputs, version="v2"):
         kind = event["event"]
@@ -114,13 +153,16 @@ async def _stream(message: str, session_id: str) -> AsyncIterator[str]:
             )
 
         elif kind == "on_tool_end":
+            output = str(event["data"].get("output", ""))
+            if output and output != "Ничего не найдено.":
+                context_parts.append(output)
             yield _sse(
                 {
                     "type": "tool-result",
                     "data": {
                         "toolName": name,
                         "toolCallId": event.get("run_id", ""),
-                        "output": str(event["data"].get("output", ""))[:500],
+                        "output": output[:500],
                     },
                 }
             )
@@ -149,6 +191,13 @@ async def _stream(message: str, session_id: str) -> AsyncIterator[str]:
                 else:
                     full_response += part_text
                     yield _sse({"type": "tokens", "data": {"chunk": part_text}})
+
+    # верификация — только если были вызовы инструментов
+    if full_response and context_parts:
+        yield _sse({"type": "verification-start", "data": {}})
+        result = await _verify(full_response, context_parts)
+        if result:
+            yield _sse({"type": "verification", "data": {"result": result}})
 
     yield _sse({"type": "end", "data": {"output": full_response}})
     add_messages(session_id, message, full_response)

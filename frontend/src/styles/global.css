@@ -99,6 +99,33 @@ html, body, #root {
   max-height: 300px; overflow-y: auto;
 }
 
+/* ── Verification block ── */
+.verification-block {
+  border: 1px solid #2a3a5a; border-radius: 8px; overflow: hidden;
+  font-size: 12px; opacity: 0.9;
+}
+.verification-block--ok { border-color: #1e6b3a; }
+.verification-block--warn { border-color: #7a4e00; }
+
+.verification-block__header {
+  width: 100%; display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; background: #131926;
+  border: none; cursor: pointer; color: var(--text-muted); font-size: 12px;
+  text-align: left; transition: background .15s;
+}
+.verification-block--ok .verification-block__header { background: #0d2018; color: #4caf80; }
+.verification-block--warn .verification-block__header { background: #201500; color: #c88a00; }
+.verification-block__header:hover { filter: brightness(1.15); }
+.verification-block__icon { font-size: 13px; }
+.verification-block__label { flex: 1; font-style: italic; }
+
+.verification-block__body {
+  padding: 10px 12px;
+  border-top: 1px solid #2a3a5a;
+}
+.verification-block--ok .verification-block__body { background: #091510; border-color: #1e6b3a; }
+.verification-block--warn .verification-block__body { background: #150d00; border-color: #7a4e00; }
+
 /* ── Tool steps ── */
 .msg-steps { display: flex; flex-direction: column; gap: 4px; }
 

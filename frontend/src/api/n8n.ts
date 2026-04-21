@@ -1,9 +1,10 @@
 export interface N8nEvent {
-  type: "begin" | "tokens" | "thinking" | "tool-call" | "tool-result" | "end" | "error";
+  type: "begin" | "tokens" | "thinking" | "tool-call" | "tool-result" | "verification-start" | "verification" | "end" | "error";
   metadata?: { nodeName?: string; nodeId?: string };
   data?: {
     chunk?: string;
     output?: string;
+    result?: string;
     toolName?: string;
     toolCallId?: string;
     toolInput?: unknown;

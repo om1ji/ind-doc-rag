@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ToolStep } from "./ToolStep";
 import { ThinkingBlock } from "./ThinkingBlock";
+import { VerificationBlock } from "./VerificationBlock";
 import type { Message as MessageType } from "../hooks/useChat";
 
 interface Props {
@@ -31,6 +32,13 @@ export function Message({ message }: Props) {
               <ToolStep key={step.id} step={step} />
             ))}
           </div>
+        )}
+
+        {!isUser && (message.verifying || message.verification) && (
+          <VerificationBlock
+            result={message.verification}
+            verifying={!!message.verifying}
+          />
         )}
 
         {(message.content || message.streaming) && (
