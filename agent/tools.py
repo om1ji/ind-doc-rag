@@ -1,10 +1,15 @@
+import re
+
 import httpx
 from langchain_core.tools import tool
 from langchain_openai import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
+from qdrant_client.models import FieldCondition, Filter, MatchValue
 
-from .config import EMBED_BASE_URL, QDRANT_URL, DOCS_API_URL
+from .config import DOCS_API_URL, EMBED_BASE_URL, QDRANT_URL
+
+_DEVICE_MODEL_RE = re.compile(r"ОПП-[\d,.\-]+", re.IGNORECASE)
 
 _qdrant = QdrantClient(url=QDRANT_URL)
 _embeddings = OpenAIEmbeddings(
@@ -63,7 +68,20 @@ async def industrial_machines_search(query: str) -> str:
     Если после 2 переформулировок нет результата — вызови get_document.
     """
     store = _make_store("documents")
-    docs = await store.asimilarity_search(query, k=5)
+    model_match = _DEVICE_MODEL_RE.search(query)
+    qdrant_filter = (
+        Filter(
+            must=[
+                FieldCondition(
+                    key="metadata.device_model",
+                    match=MatchValue(value=model_match.group(0).upper()),
+                )
+            ]
+        )
+        if model_match
+        else None
+    )
+    docs = await store.asimilarity_search(query, k=10, filter=qdrant_filter)
     return _format_docs(docs) if docs else "Ничего не найдено."
 
 
@@ -95,7 +113,7 @@ async def law_search(query: str) -> str:
     не пересказывай — приводи точную формулировку закона.
     """
     store = _make_store("law")
-    docs = await store.asimilarity_search(query, k=5)
+    docs = await store.asimilarity_search(query, k=10)
     return _format_docs(docs) if docs else "Ничего не найдено."
 
 
@@ -121,7 +139,7 @@ async def naming_search(query: str) -> str:
     Для ответа пользователю используй поле name как типовое наименование, section как раздел классификации.
     """
     store = _make_store("naming")
-    docs = await store.asimilarity_search(query, k=5)
+    docs = await store.asimilarity_search(query, k=10)
     return _format_docs(docs) if docs else "Ничего не найдено."
 
 
