@@ -3,38 +3,63 @@ import re
 import httpx
 from langchain_core.tools import tool
 from langchain_openai import OpenAIEmbeddings
-from langchain_qdrant import QdrantVectorStore
-from qdrant_client import QdrantClient
-from qdrant_client.models import FieldCondition, Filter, MatchValue
+from qdrant_client import AsyncQdrantClient
+from qdrant_client.models import (
+    FieldCondition,
+    Filter,
+    Fusion,
+    FusionQuery,
+    MatchValue,
+    Prefetch,
+)
 
+from ingestion.sparse_embedder import sparse_embed_texts
 from .config import DOCS_API_URL, EMBED_BASE_URL, QDRANT_URL
 
 _DEVICE_MODEL_RE = re.compile(r"ОПП-[\d,.\-]+", re.IGNORECASE)
 
-_qdrant = QdrantClient(url=QDRANT_URL)
+_qdrant = AsyncQdrantClient(url=QDRANT_URL)
 _embeddings = OpenAIEmbeddings(
     model="bge-m3",
     base_url=f"{EMBED_BASE_URL}/v1",
     api_key="none",
+    timeout=60,
 )
 
 
-def _make_store(collection: str) -> QdrantVectorStore:
-    return QdrantVectorStore(
-        client=_qdrant,
+async def _search(
+    collection: str, query: str, k: int, qdrant_filter: Filter | None = None
+) -> list:
+    dense_vector = await _embeddings.aembed_query(query)
+    sparse_vector = sparse_embed_texts([query])[0]
+
+    response = await _qdrant.query_points(
         collection_name=collection,
-        embedding=_embeddings,
+        prefetch=[
+            Prefetch(
+                query=dense_vector, using="dense", limit=k * 2, filter=qdrant_filter
+            ),
+            Prefetch(
+                query=sparse_vector, using="sparse", limit=k * 2, filter=qdrant_filter
+            ),
+        ],
+        query=FusionQuery(fusion=Fusion.RRF),
+        limit=k,
+        with_payload=True,
     )
+    return response.points
 
 
-def _format_docs(docs: list) -> str:
+def _format_results(points: list) -> str:
     results = []
-    for doc in docs:
-        meta = doc.metadata
-        results.append(
-            f"[{meta.get('section_path', '')}]\n{doc.page_content}\n"
-            f"source: {meta.get('source', '')} | page: {meta.get('page_num', '')}"
-        )
+    for p in points:
+        payload = p.payload or {}
+        meta = payload.get("metadata", {})
+        section = meta.get("section_path") or meta.get("doc_context", "")
+        content = payload.get("page_content", "")
+        source = meta.get("source", "")
+        page = meta.get("page_num", "")
+        results.append(f"[{section}]\n{content}\nsource: {source} | page: {page}")
     return "\n\n---\n\n".join(results)
 
 
@@ -67,22 +92,40 @@ async def industrial_machines_search(query: str) -> str:
     (например "характеристики" → "параметры", "масса" → "вес").
     Если после 2 переформулировок нет результата — вызови get_document.
     """
-    store = _make_store("documents")
     model_match = _DEVICE_MODEL_RE.search(query)
-    qdrant_filter = (
-        Filter(
-            must=[
-                FieldCondition(
-                    key="metadata.device_model",
-                    match=MatchValue(value=model_match.group(0).upper()),
-                )
-            ]
-        )
+    must = (
+        [
+            FieldCondition(
+                key="metadata.device_model",
+                match=MatchValue(value=model_match.group(0).upper()),
+            )
+        ]
         if model_match
-        else None
+        else []
     )
-    docs = await store.asimilarity_search(query, k=10, filter=qdrant_filter)
-    return _format_docs(docs) if docs else "Ничего не найдено."
+    qdrant_filter = Filter(
+        must=must,
+        must_not=[
+            FieldCondition(
+                key="metadata.doc_context",
+                match=MatchValue(value="## ОГЛАВЛЕНИЕ"),
+            ),
+            FieldCondition(
+                key="metadata.section_path",
+                match=MatchValue(value="ОГЛАВЛЕНИЕ"),
+            ),
+            FieldCondition(
+                key="metadata.chunk_type",
+                match=MatchValue(value="table_schema"),
+            ),
+            FieldCondition(
+                key="metadata.chunk_type",
+                match=MatchValue(value="table_summary"),
+            ),
+        ],
+    )
+    points = await _search("documents", query, k=10, qdrant_filter=qdrant_filter)
+    return _format_results(points) if points else "Ничего не найдено."
 
 
 @tool
@@ -112,9 +155,8 @@ async def law_search(query: str) -> str:
     При ответе пользователю: цитируй конкретную статью из section_path,
     не пересказывай — приводи точную формулировку закона.
     """
-    store = _make_store("law")
-    docs = await store.asimilarity_search(query, k=10)
-    return _format_docs(docs) if docs else "Ничего не найдено."
+    points = await _search("law", query, k=10)
+    return _format_results(points) if points else "Ничего не найдено."
 
 
 @tool
@@ -138,9 +180,8 @@ async def naming_search(query: str) -> str:
 
     Для ответа пользователю используй поле name как типовое наименование, section как раздел классификации.
     """
-    store = _make_store("naming")
-    docs = await store.asimilarity_search(query, k=10)
-    return _format_docs(docs) if docs else "Ничего не найдено."
+    points = await _search("naming", query, k=10)
+    return _format_results(points) if points else "Ничего не найдено."
 
 
 @tool

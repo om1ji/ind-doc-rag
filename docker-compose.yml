@@ -21,8 +21,9 @@ services:
       -m /models/qwen3-8b-q4_k_m.gguf
       --host 0.0.0.0
       --port 8080
-      --ctx-size 32768
+      --ctx-size 16384
       -n -1
+      --jinja
       -ngl ${GPU_LAYERS:-0}
 
   llama-embed:
@@ -40,6 +41,9 @@ services:
       --host 0.0.0.0
       --port 8081
       --embedding
+      --ctx-size 4096
+      --batch-size 2048
+      --ubatch-size 2048
       -ngl ${GPU_LAYERS:-0}
 
   qdrant:
@@ -80,8 +84,8 @@ services:
     networks:
       - rag_network
     environment:
-      LLM_URL: http://llama-chat:8080
-      EMBED_URL: http://llama-embed:8081
+      LLM_URL: ${LLM_URL:-http://llama-chat:8080}
+      EMBED_URL: ${EMBED_URL:-http://llama-embed:8081}
       QDRANT_URL: http://qdrant:6333
       DOCS_API_URL: http://docs-api:8000
     depends_on:

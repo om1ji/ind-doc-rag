@@ -3,6 +3,7 @@ import { Message } from "./components/Message";
 import { InputBar } from "./components/InputBar";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { useChat, type ChatConfig } from "./hooks/useChat";
+import { useModelStatus } from "./hooks/useModelStatus";
 import "./styles/global.css";
 
 const DEFAULT_CONFIG: ChatConfig = {
@@ -22,6 +23,7 @@ function loadConfig(): ChatConfig {
 export default function App() {
   const [config, setConfig] = useState<ChatConfig>(loadConfig);
   const { messages, isLoading, send, stop, clear } = useChat(config);
+  const modelStatus = useModelStatus();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,6 +49,16 @@ export default function App() {
           <SettingsPanel config={config} onChange={handleConfig} />
         </div>
       </header>
+
+      {!modelStatus.ready && (
+        <div className="model-loading-banner">
+          <span className="model-loading-spinner" />
+          Модели загружаются&nbsp;
+          <span className="model-loading-detail">
+            LLM: {modelStatus.llm} &nbsp;|&nbsp; Embed: {modelStatus.embed}
+          </span>
+        </div>
+      )}
 
       <main className="chat-area">
         {messages.length === 0 && (

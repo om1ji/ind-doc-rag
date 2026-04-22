@@ -8,8 +8,13 @@ llm = ChatOpenAI(
     model="qwen3",
     base_url=f"{LLM_BASE_URL}/v1",
     api_key="none",
-    temperature=0.1,
+    temperature=0.6,
     streaming=True,
+    model_kwargs={
+        "chat_template_kwargs": {
+            "thinking": {"type": "enabled", "budget_tokens": 2048}
+        },
+    },
 )
 
 agent = create_react_agent(llm, ALL_TOOLS, prompt=SYSTEM_PROMPT)

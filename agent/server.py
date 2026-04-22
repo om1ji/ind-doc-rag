@@ -219,3 +219,25 @@ async def chat(req: ChatRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/status")
+async def status():
+    import httpx
+    from .config import EMBED_BASE_URL, LLM_BASE_URL
+
+    async def check(url: str) -> str:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get(f"{url}/health")
+                data = r.json()
+                return data.get("status", "unknown")
+        except Exception:
+            return "unavailable"
+
+    llm_status, embed_status = await asyncio.gather(
+        check(LLM_BASE_URL),
+        check(EMBED_BASE_URL),
+    )
+    ready = llm_status == "ok" and embed_status == "ok"
+    return {"ready": ready, "llm": llm_status, "embed": embed_status}

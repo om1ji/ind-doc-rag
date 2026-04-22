@@ -14,8 +14,10 @@ RUN pip install --no-cache-dir \
     langchain-core \
     langchain-openai \
     langchain-qdrant \
-    qdrant-client
+    qdrant-client \
+    "fastembed>=0.3"
 
 COPY agent/ ./agent/
+COPY ingestion/ ./ingestion/
 
 CMD ["uvicorn", "agent.server:app", "--host", "0.0.0.0", "--port", "8001"]
